@@ -230,6 +230,19 @@ redirect_path_if_absolute (const char *pathname)
     return redirect_path_full (pathname, 0, 1);
 }
 
+static char *
+redirect_semaphore (const char *name)
+{
+    if (!name || name[0] != '/' ||
+        strncmp (name + 1, saved_snap_name, strlen (saved_snap_name)) == 0) {
+        return (char *)name;
+    }
+
+    char *new_name = malloc(PATH_MAX);
+    snprintf (new_name, PATH_MAX - 1, "/snap.%s.%s", saved_snap_name, name + 1);
+    return new_name;
+}
+
 #define REDIRECT_1_1(RET, NAME) \
 RET \
 NAME (const char *path) \
@@ -542,6 +555,20 @@ sem_open (const char *name, int oflag, ...)
 
     if (buffer)
         free (buffer);
+
+    return result;
+}
+
+int sem_unlink(const char *name)
+{
+    int (*_sem_unlink) (const char *name);
+
+    _sem_unlink = (int (*)(const char *name)) dlsym (RTLD_NEXT, "sem_unlink");
+    char *new_name = redirect_semaphore (name);
+    int result = _sem_unlink (new_name);
+
+    if (new_name != name)
+        free (new_name);
 
     return result;
 }
