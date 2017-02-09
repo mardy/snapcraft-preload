@@ -504,63 +504,40 @@ sem_open (const char *name, int oflag, ...)
 
     _sem_open = (sem_t *(*)(const char *name, int oflag, ...)) dlsym (RTLD_NEXT, "sem_open");
 
-    fprintf(stderr, "overriding sem_open('%s', %d)\n", name, oflag);
     int is_named = name && name[0] == '/';
     int override_creation = is_named && (oflag & (O_CREAT | O_EXCL));
 
-    /* Skip 9 chars, to get the part after "/dev/shm" */
-    const char *allowed_prefix = saved_snap_devshm + 8;
-
-    int must_rename = is_named && strncmp (name, allowed_prefix, strlen (allowed_prefix)) != 0;
+    char *new_name = redirect_semaphore (name);
 
     char *buffer = NULL;
-    const char *new_name = name;
-
-    if (must_rename || override_creation) {
-        buffer = malloc (PATH_MAX);
-        int offset = 0;
-
-        if (override_creation)
-            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", "/dev/shm/sem.");
-
-        /* We include the last '.' from the line above; we'll replace it with a
-         * '/' after having called open(). */
-        new_name = buffer + offset - 1;
-
-        if (must_rename)
-            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s.%s", allowed_prefix + 1, name + 1);
-        else
-            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name + 1);
-    }
-
+    unsigned int value = 0;
     if (override_creation) {
+        buffer = malloc (PATH_MAX);
+        snprintf (buffer, PATH_MAX - 1, "/dev/shm/sem.%s", new_name + 1);
+
         va_list ap;
         va_start (ap, oflag);
         mode_t mode = va_arg (ap, mode_t);
-        unsigned int value = va_arg (ap, unsigned int);
+        value = va_arg (ap, unsigned int);
         va_end (ap);
 
-        int (*_open) (const char *path, int flags, mode_t mode);
-        _open = (int (*)(const char *path, int flags, mode_t mode)) dlsym (RTLD_NEXT, "open");
-        int fd = _open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
-    fprintf(stderr, "creating file '%s', ret = %d\n", buffer, fd);
+        int fd = open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
         if (fd == -1) {
             free (buffer);
             return SEM_FAILED;
         }
         close (fd);
-        /* at this point, new_name still starts with a '.' */
-        buffer[sizeof("/dev/shm/sem.") - 2] = '/';
-        if (value != 0) {
-            fprintf(stderr, "preload.c: ignoring \"value\" parameter for sem_open()\n");
-        }
     }
 
     sem_t *result = _sem_open(new_name, 0);
-    fprintf(stderr, "Opened semaphore %s: %d\n", new_name, result != SEM_FAILED);
 
     if (buffer)
         free (buffer);
+
+    /* If we created the semaphore, we must set the initial value on it */
+    for (int i = 0; i < value; i++) {
+        sem_post (result);
+    }
 
     return result;
 }
@@ -571,10 +548,9 @@ int sem_unlink(const char *name)
 
     _sem_unlink = (int (*)(const char *name)) dlsym (RTLD_NEXT, "sem_unlink");
     char *new_name = redirect_semaphore (name);
+
     int result = _sem_unlink (new_name);
 
-    perror("Removing semaphore");
-    fprintf(stderr, "unlinking semaphore %s: %d", new_name, result);
     if (new_name != name)
         free (new_name);
 
