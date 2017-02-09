@@ -503,9 +503,11 @@ sem_open (const char *name, int oflag, ...)
         int offset = 0;
 
         if (override_creation)
-            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", "/dev/shm");
+            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", "/dev/shm/sem.");
 
-        new_name = buffer + offset;
+        /* We include the last '.' from the line above; we'll replace it with a
+         * '/' after having called open(). */
+        new_name = buffer + offset - 1;
 
         if (must_rename)
             snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s.%s", allowed_prefix, name + 1);
@@ -520,12 +522,16 @@ sem_open (const char *name, int oflag, ...)
         unsigned int value = va_arg (ap, unsigned int);
         va_end (ap);
 
-        int ret = open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
+        int (*_open) (const char *path, int flags, mode_t mode);
+        _open = (int (*)(const char *path, int flags, mode_t mode)) dlsym (RTLD_NEXT, "open");
+        int ret = _open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
     fprintf(stderr, "creating file '%s', ret = %d\n", buffer, ret);
         if (ret == -1) {
             free (buffer);
             return SEM_FAILED;
         }
+        /* at this point, new_name still starts with a '.' */
+        buffer[sizeof("/dev/shm/sem.") - 2] = '/';
         if (value != 0) {
             fprintf(stderr, "preload.c: ignoring \"value\" parameter for sem_open()\n");
         }
