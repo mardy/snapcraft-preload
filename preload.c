@@ -486,6 +486,7 @@ sem_open (const char *name, int oflag, ...)
 
     _sem_open = (sem_t *(*)(const char *name, int oflag, ...)) dlsym (RTLD_NEXT, "sem_open");
 
+    fprintf(stderr, "overriding sem_open('%s', %d)\n", name, oflag);
     int is_named = name && name[0] == '/';
     int override_creation = is_named && (oflag & (O_CREAT | O_EXCL));
 
@@ -520,6 +521,7 @@ sem_open (const char *name, int oflag, ...)
         va_end (ap);
 
         int ret = open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
+    fprintf(stderr, "creating file '%s', ret = %d\n", buffer, ret);
         if (ret == -1) {
             free (buffer);
             return SEM_FAILED;
