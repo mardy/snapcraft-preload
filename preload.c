@@ -168,9 +168,14 @@ redirect_path_full (const char *pathname, int check_parent, int only_if_absolute
     redirected_pathname = malloc (PATH_MAX);
 
     if (strncmp (pathname, "/dev/shm/", 9) == 0) {
-        snprintf(redirected_pathname, PATH_MAX - 1, "%s.%s",
-                 saved_snap_devshm, pathname + 9);
-        return redirected_pathname;
+        const char *ptr = pathname + 9;
+        if (strncmp (ptr, "sem.", 4) == 0) ptr += 4;
+        const char *expected_prefix = saved_snap_devshm + 9;
+        if (strncmp (ptr, expected_prefix, strlen (expected_prefix)) != 0) { 
+            snprintf(redirected_pathname, PATH_MAX - 1, "%s.%s",
+                     saved_snap_devshm, pathname + 9);
+            return redirected_pathname;
+        }
     }
 
     redirected_pathname = malloc (PATH_MAX);
@@ -537,12 +542,13 @@ sem_open (const char *name, int oflag, ...)
 
         int (*_open) (const char *path, int flags, mode_t mode);
         _open = (int (*)(const char *path, int flags, mode_t mode)) dlsym (RTLD_NEXT, "open");
-        int ret = _open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
-    fprintf(stderr, "creating file '%s', ret = %d\n", buffer, ret);
-        if (ret == -1) {
+        int fd = _open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
+    fprintf(stderr, "creating file '%s', ret = %d\n", buffer, fd);
+        if (fd == -1) {
             free (buffer);
             return SEM_FAILED;
         }
+        close (fd);
         /* at this point, new_name still starts with a '.' */
         buffer[sizeof("/dev/shm/sem.") - 2] = '/';
         if (value != 0) {
