@@ -567,6 +567,7 @@ int sem_unlink(const char *name)
     char *new_name = redirect_semaphore (name);
     int result = _sem_unlink (new_name);
 
+    fprintf(stderr, "unlinking semaphore %s: %d", new_name, result);
     if (new_name != name)
         free (new_name);
 
