@@ -510,9 +510,9 @@ sem_open (const char *name, int oflag, ...)
         new_name = buffer + offset - 1;
 
         if (must_rename)
-            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s.%s", allowed_prefix, name + 1);
+            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s.%s", allowed_prefix + 1, name + 1);
         else
-            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name);
+            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name + 1);
     }
 
     if (override_creation) {
