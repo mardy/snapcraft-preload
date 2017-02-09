@@ -532,6 +532,7 @@ sem_open (const char *name, int oflag, ...)
     }
 
     sem_t *result = _sem_open(new_name, 0);
+    fprintf(stderr, "Opened semaphore %s: %d\n", new_name, result != SEM_FAILED);
 
     if (buffer)
         free (buffer);
