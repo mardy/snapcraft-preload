@@ -493,7 +493,7 @@ sem_open (const char *name, int oflag, ...)
     /* Skip 9 chars, to get the part after "/dev/shm" */
     const char *allowed_prefix = saved_snap_devshm + 8;
 
-    int must_rename = is_named && strncmp (name, allowed_prefix, sizeof(allowed_prefix)) != 0;
+    int must_rename = is_named && strncmp (name, allowed_prefix, strlen (allowed_prefix)) != 0;
 
     char *buffer = NULL;
     const char *new_name = name;
@@ -508,9 +508,9 @@ sem_open (const char *name, int oflag, ...)
         new_name = buffer + offset;
 
         if (must_rename)
-            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", allowed_prefix);
-
-        snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name);
+            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s.%s", allowed_prefix, name + 1);
+        else
+            snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name);
     }
 
     if (override_creation) {
