@@ -22,6 +22,7 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <semaphore.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -476,6 +477,64 @@ scandirat (int dirfd, const char *dirp, struct dirent ***namelist, int (*filter)
     free (new_path);
 
     return ret;
+}
+
+sem_t *
+sem_open (const char *name, int oflag, ...)
+{
+    sem_t *(*_sem_open) (const char *name, int oflag, ...);
+
+    _sem_open = (sem_t *(*)(const char *name, int oflag, ...)) dlsym (RTLD_NEXT, "sem_open");
+
+    int is_named = name && name[0] == '/';
+    int override_creation = is_named && (oflag & (O_CREAT | O_EXCL));
+
+    /* Skip 9 chars, to get the part after "/dev/shm" */
+    const char *allowed_prefix = saved_snap_devshm + 8;
+
+    int must_rename = is_named && strncmp (name, allowed_prefix, sizeof(allowed_prefix)) != 0;
+
+    char *buffer = NULL;
+    const char *new_name = name;
+
+    if (must_rename || override_creation) {
+        buffer = malloc (PATH_MAX);
+        int offset = 0;
+
+        if (override_creation)
+            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", "/dev/shm");
+
+        new_name = buffer + offset;
+
+        if (must_rename)
+            offset += snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", allowed_prefix);
+
+        snprintf (buffer + offset, PATH_MAX - 1 - offset, "%s", name);
+    }
+
+    if (override_creation) {
+        va_list ap;
+        va_start (ap, oflag);
+        mode_t mode = va_arg (ap, mode_t);
+        unsigned int value = va_arg (ap, unsigned int);
+        va_end (ap);
+
+        int ret = open(buffer, (oflag & (O_CREAT | O_EXCL)) | O_RDWR, mode);
+        if (ret == -1) {
+            free (buffer);
+            return SEM_FAILED;
+        }
+        if (value != 0) {
+            fprintf(stderr, "preload.c: ignoring \"value\" parameter for sem_open()\n");
+        }
+    }
+
+    sem_t *result = _sem_open(new_name, 0);
+
+    if (buffer)
+        free (buffer);
+
+    return result;
 }
 
 int
